@@ -7,8 +7,11 @@ class Earthquake:
     def __init__(self, item):
         self.id = item['id']
         self.properties = item['properties']
-        self.geomatry = item['geometry']
+        self.geometry = item['geometry']
         self.type = item['type']
+        self.title = self.properties['title']
+        self.magnitude = self.properties['mag']
+        self.time = self.properties['time']
 
 
 
@@ -18,13 +21,16 @@ def main():
     response = http.request('GET', hourlyUSGSFeed)
 
     if (response.status == 200):
-        decodedJsonData = json.loads(response.data.decode('utf-8'))
-        for key, earthquakes in decodedJsonData.items():
-            if key == 'features':
-                for earthquakeData in earthquakes:
-                    earthquake = Earthquake(earthquakeData)
-                    print(earthquake.id, earthquake.properties.keys(), earthquake.geomatry)
+        earthquakes = []
 
+        decodedJsonData = json.loads(response.data.decode('utf-8'))
+        for key, earthquakesData in decodedJsonData.items():
+            if key == 'features':
+                for earthquakeData in earthquakesData:
+                    earthquake = Earthquake(earthquakeData)
+                    earthquakes.append(earthquake)
+                    #print(earthquake.properties)
+        print(earthquakes)
 
     else:
         print("Error: Request to", hourlyUSGSFeed, " Status:", response.status)
