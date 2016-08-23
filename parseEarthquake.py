@@ -59,58 +59,88 @@ def main():
     response = http.request('GET', feed)
 
     if response.status == 200:
+
         db = sqlite3.connect('earthquakes.db')
         cursor = db.cursor()
+
+        ###
+        # New Tables
+        ###
+
         cursor.execute(''' DROP TABLE earthquakes ''')
         cursor.execute('''
-            CREATE TABLE earthquakes(id INTEGER PRIMARY KEY, earthquake_id TEXT UNIQUE, title TEXT,
-            magnitude REAL, type TEXT, url TEXT, data TEXT, created_at INTEGER)''')
+            CREATE TABLE earthquakes(
+            id INTEGER PRIMARY KEY,
+            earthquake_id TEXT UNIQUE,
+            title TEXT,
+            magnitude REAL,
+            source TEXT,
+            url TEXT,
+            data TEXT,
+            feed_generated_time TEXT,
+            created_at INTEGER)
+        ''')
 
-        earthquakes = []
-        database_insert = []
-        decoded_json_data = json.loads(response.data.decode('utf-8'))
-
-
-        #set up the metadata table
         cursor.execute(''' DROP TABLE metadata ''')
         cursor.execute('''
-            CREATE TABLE metadata(id INTEGER PRIMARY KEY, generated TEXT UNIQUE, created_at INTEGER)''')
-        metadata = json.dumps(decoded_json_data['metadata']['generated'])
+            CREATE TABLE metadata(
+            id INTEGER PRIMARY KEY,
+            generated TEXT UNIQUE,
+            created_at INTEGER)
+            ''')
 
-        cursor.execute(''' INSERT INTO metadata(generated, created_at) values (?,?)''', (metadata,datetime.datetime.utcnow()))
-        # print(decoded_json_data)
-        ''' look at the rest of the data feed.
-        I would need to store that.
-        How do I convert the Dict back to a string so it can be inserted into the database
-        '''
+        decoded_json_data = json.loads(response.data.decode('utf-8'))
+        generated_at = json.dumps(decoded_json_data['metadata']['generated'])
 
-        for key, earthquakes_data in decoded_json_data.items():
-            if key == 'features':
-                for earthquake_data in earthquakes_data:
+        # Compare metadata generated with the value in the database
+        cursor = db.execute(''' SELECT * FROM metadata ORDER BY id ASC''')
 
-                    earthquake = Earthquake(earthquake_data)
-                    earthquakes.append(earthquake)
-                    raw_data = json.dumps(earthquake.get_raw())
-                    #print(raw_data)
+        row = cursor.fetchone()
+        # if row[1] == generated_at:
+        #     print(generated_at, "is the same")
+        # else:
+        #     print(generated_at, row[1], "generated time is different")
 
-                    new_row = (earthquake.get_attribute('id'), 
-                        earthquake.get_property('title'), 
-                        earthquake.get_property('mag'),
-                        earthquake.get_property('type'),
-                        earthquake.get_property('url'),
-                        raw_data,
-                        datetime.datetime.utcnow(),
-                    )
+        if 1 == 1:
+            cursor.execute(''' INSERT INTO metadata(generated, created_at) values (?,?)''', (generated_at,datetime.datetime.utcnow()))
+            # print(decoded_json_data)
+            ''' look at the rest of the data feed.
+            I would need to store that.
+            How do I convert the Dict back to a string so it can be inserted into the database
+            '''
 
-                    database_insert.append(new_row)
+            earthquakes = []
+            database_insert = []
+            for key, earthquakes_data in decoded_json_data.items():
+                if key == 'features':
+                    for earthquake_data in earthquakes_data:
 
-        print("Adding to database")
-        cursor.executemany(''' INSERT INTO earthquakes(
-            earthquake_id, title, magnitude, type, url, data, created_at)
-        values(?,?,?,?,?,?,?)''', database_insert)
-        db.commit()
+                        earthquake = Earthquake(earthquake_data)
+                        earthquakes.append(earthquake)
+                        raw_data = json.dumps(earthquake.get_raw())
+                        #print(raw_data)
+
+                        new_row = (earthquake.get_attribute('id'),
+                            earthquake.get_property('title'),
+                            earthquake.get_property('mag'),
+                            earthquake.get_property('type'),
+                            earthquake.get_property('url'),
+                            raw_data,
+                            generated_at,
+                            datetime.datetime.utcnow(),
+                        )
+
+                        database_insert.append(new_row)
+
+            print("Adding to database")
+            cursor.executemany(''' INSERT INTO earthquakes(
+                earthquake_id, title, magnitude, source, url, data, feed_generated_time, created_at)
+            values(?,?,?,?,?,?,?,?)''', database_insert)
+            db.commit()
+            db.close()
+
     else:
-        print("Error: Request to", hourlyUSGSFeed, " Status:", response.status)
+        print("Error: Request failed. Status:", response.status)
 
 
 if __name__ == "__main__" : main()
