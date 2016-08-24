@@ -152,13 +152,15 @@ def main():
                         database_insert[earthquake.get_attribute('id')] = new_row
 
             print(len(database_insert), "earthquakes recorded in the feed")
+
+            # Check if any of these earthquakes are already in the database.
             print("Checking earthquakes in the database")
-
             parameters = ",".join("?"*len(earthquake_ids))
-
             sql_query = "SELECT id, earthquake_id from earthquakes WHERE earthquake_id IN ({})".format(parameters)
             cursor = db.execute(sql_query, earthquake_ids)
-            number_of_earthquakes_removed = 0;
+
+            # Remove earthquakes we have already saved
+            number_of_earthquakes_removed = 0
             for row in cursor:
                 del database_insert[row[1]]
                 number_of_earthquakes_removed += 1
@@ -166,6 +168,7 @@ def main():
             print(number_of_earthquakes_removed, "were removed from the database insert list")
             print(len(database_insert), "earthquakes to be added to the database")
 
+            # Add new earthquakes to the database
             if len(database_insert) > 0:
                 cursor.executemany(''' INSERT INTO earthquakes(
                     earthquake_id, title, magnitude, source, url, data, feed_generated_time, created_at)
