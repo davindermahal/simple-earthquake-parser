@@ -61,33 +61,32 @@ def main():
     if response.status == 200:
 
         db = sqlite3.connect('earthquakes.db')
-        cursor = db.cursor()
 
         ###
         # New Tables
         ###
 
-        cursor.execute(''' DROP TABLE earthquakes ''')
-        cursor.execute('''
-            CREATE TABLE earthquakes(
-            id INTEGER PRIMARY KEY,
-            earthquake_id TEXT UNIQUE,
-            title TEXT,
-            magnitude REAL,
-            source TEXT,
-            url TEXT,
-            data TEXT,
-            feed_generated_time TEXT,
-            created_at INTEGER)
-        ''')
-
-        cursor.execute(''' DROP TABLE metadata ''')
-        cursor.execute('''
-            CREATE TABLE metadata(
-            id INTEGER PRIMARY KEY,
-            generated TEXT UNIQUE,
-            created_at INTEGER)
-            ''')
+        # cursor.execute(''' DROP TABLE earthquakes ''')
+        # cursor.execute('''
+        #     CREATE TABLE earthquakes(
+        #     id INTEGER PRIMARY KEY,
+        #     earthquake_id TEXT UNIQUE,
+        #     title TEXT,
+        #     magnitude REAL,
+        #     source TEXT,
+        #     url TEXT,
+        #     data TEXT,
+        #     feed_generated_time TEXT,
+        #     created_at INTEGER)
+        # ''')
+        #
+        # cursor.execute(''' DROP TABLE metadata ''')
+        # cursor.execute('''
+        #     CREATE TABLE metadata(
+        #     id INTEGER PRIMARY KEY,
+        #     generated TEXT UNIQUE,
+        #     created_at INTEGER)
+        #     ''')
 
         decoded_json_data = json.loads(response.data.decode('utf-8'))
         generated_at = json.dumps(decoded_json_data['metadata']['generated'])
@@ -96,47 +95,63 @@ def main():
         cursor = db.execute(''' SELECT * FROM metadata ORDER BY id ASC''')
 
         row = cursor.fetchone()
-        # if row[1] == generated_at:
-        #     print(generated_at, "is the same")
-        # else:
-        #     print(generated_at, row[1], "generated time is different")
+        if row[1] == generated_at:
+            print("Feed generation time is the same")
+        else:
+            print("Last recorded feed generated:", row[1])
+            print("Feed generated:", generated_at)
 
-        if 1 == 1:
-            cursor.execute(''' INSERT INTO metadata(generated, created_at) values (?,?)''', (generated_at,datetime.datetime.utcnow()))
-            # print(decoded_json_data)
-            ''' look at the rest of the data feed.
-            I would need to store that.
-            How do I convert the Dict back to a string so it can be inserted into the database
-            '''
+            cursor = db.cursor()
+            cursor.execute(''' INSERT INTO metadata(generated, created_at) values (?,?)''', (generated_at, datetime.datetime.utcnow()))
 
             earthquakes = []
-            database_insert = []
+            database_insert = {}
+            earthquake_ids = []
+
+            print("Parsing earthquake feed")
+
             for key, earthquakes_data in decoded_json_data.items():
                 if key == 'features':
+                    # features contain the individual earthquakes
                     for earthquake_data in earthquakes_data:
 
                         earthquake = Earthquake(earthquake_data)
                         earthquakes.append(earthquake)
-                        raw_data = json.dumps(earthquake.get_raw())
-                        #print(raw_data)
+
+                        earthquake_ids.append(earthquake.get_attribute('id'))
 
                         new_row = (earthquake.get_attribute('id'),
-                            earthquake.get_property('title'),
-                            earthquake.get_property('mag'),
-                            earthquake.get_property('type'),
-                            earthquake.get_property('url'),
-                            raw_data,
-                            generated_at,
-                            datetime.datetime.utcnow(),
-                        )
+                                   earthquake.get_property('title'),
+                                   earthquake.get_property('mag'),
+                                   earthquake.get_property('type'),
+                                   earthquake.get_property('url'),
+                                   json.dumps(earthquake.get_raw()),
+                                   generated_at,
+                                   datetime.datetime.utcnow(),
+                                   )
+                        database_insert[earthquake.get_attribute('id')] = new_row
 
-                        database_insert.append(new_row)
+            print(len(database_insert), "earthquakes recorded in the feed")
+            print("Checking earthquakes in the database")
 
-            print("Adding to database")
-            cursor.executemany(''' INSERT INTO earthquakes(
-                earthquake_id, title, magnitude, source, url, data, feed_generated_time, created_at)
-            values(?,?,?,?,?,?,?,?)''', database_insert)
-            db.commit()
+            parameters = ",".join(("?")*len(earthquake_ids))
+
+            sql_query = "SELECT id, earthquake_id from earthquakes WHERE earthquake_id IN ({})".format(parameters)
+            cursor = db.execute(sql_query, earthquake_ids)
+            number_of_earthquakes_removed = 0;
+            for row in cursor:
+                del database_insert[row[1]]
+                number_of_earthquakes_removed += 1
+
+            print(number_of_earthquakes_removed, "were removed from the database insert list")
+            print(len(database_insert), "earthquakes to be added to the database")
+
+            if len(database_insert) > 0:
+                cursor.executemany(''' INSERT INTO earthquakes(
+                    earthquake_id, title, magnitude, source, url, data, feed_generated_time, created_at)
+                values(?,?,?,?,?,?,?,?)''', database_insert.values())
+                db.commit()
+
             db.close()
 
     else:
