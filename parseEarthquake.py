@@ -3,7 +3,7 @@
 import urllib3
 import json
 import datetime
-from datetime import date
+from datetime import timedelta
 import sqlite3
 
 
@@ -20,7 +20,6 @@ class USGSFeed:
             return self._feedUrl.format(size, duration)
         else:
             raise LookupError
-
 
 
 class Earthquake:
@@ -51,11 +50,14 @@ class Earthquake:
         return self._vars['raw']
 
 
-
 def main():
     http = urllib3.PoolManager()
     usgs = USGSFeed()
-    feed = usgs.get('day', 'all');
+    feed_duration = 'day'
+    feed_size = 'all'
+    feed = usgs.get(feed_duration, feed_size);
+    print("Starting...")
+    print("Retrieving earthquake feed for duration:", feed_duration, "and size:", feed_size)
     response = http.request('GET', feed)
 
     if response.status == 200:
@@ -85,24 +87,42 @@ def main():
         #     CREATE TABLE metadata(
         #     id INTEGER PRIMARY KEY,
         #     generated TEXT UNIQUE,
-        #     created_at INTEGER)
+        #     created_at TEXT)
         #     ''')
 
         decoded_json_data = json.loads(response.data.decode('utf-8'))
-        generated_at = json.dumps(decoded_json_data['metadata']['generated'])
+        # milliseconds since epoch
+        feed_generated_at = json.dumps(decoded_json_data['metadata']['generated'])
 
         # Compare metadata generated with the value in the database
-        cursor = db.execute(''' SELECT * FROM metadata ORDER BY id ASC''')
+        cursor = db.execute(''' SELECT * FROM metadata ORDER BY id DESC LIMIT 1''')
+        db.commit()
 
         row = cursor.fetchone()
-        if row[1] == generated_at:
-            print("Feed generation time is the same")
+
+        time_feed = int(feed_generated_at)
+        time_db = int(row[1])
+
+        time_feed_delta = timedelta(milliseconds=time_feed)
+        time_db_delta = timedelta(milliseconds=time_db)
+
+        diff = time_feed_delta - time_db_delta
+        desired_diff = timedelta(minutes=5)
+
+        print("The feed was generated at:", feed_generated_at)
+        print("It has been", diff.seconds, "seconds since the last parse.")
+
+        if diff < desired_diff:
+            print("Skipping.")
         else:
             print("Last recorded feed generated:", row[1])
-            print("Feed generated:", generated_at)
+            print("Feed generated:", feed_generated_at)
 
-            cursor = db.cursor()
-            cursor.execute(''' INSERT INTO metadata(generated, created_at) values (?,?)''', (generated_at, datetime.datetime.utcnow()))
+            print("Updating metadata with new generated value:", feed_generated_at)
+
+            db.execute(''' INSERT INTO metadata(generated, created_at) values (?,?)''',
+                           (feed_generated_at, datetime.datetime.utcnow()))
+            db.commit()
 
             earthquakes = []
             database_insert = {}
@@ -126,7 +146,7 @@ def main():
                                    earthquake.get_property('type'),
                                    earthquake.get_property('url'),
                                    json.dumps(earthquake.get_raw()),
-                                   generated_at,
+                                   feed_generated_at,
                                    datetime.datetime.utcnow(),
                                    )
                         database_insert[earthquake.get_attribute('id')] = new_row
@@ -134,7 +154,7 @@ def main():
             print(len(database_insert), "earthquakes recorded in the feed")
             print("Checking earthquakes in the database")
 
-            parameters = ",".join(("?")*len(earthquake_ids))
+            parameters = ",".join("?"*len(earthquake_ids))
 
             sql_query = "SELECT id, earthquake_id from earthquakes WHERE earthquake_id IN ({})".format(parameters)
             cursor = db.execute(sql_query, earthquake_ids)
@@ -158,5 +178,4 @@ def main():
         print("Error: Request failed. Status:", response.status)
 
 
-if __name__ == "__main__" : main()
-
+if __name__ == "__main__": main()
