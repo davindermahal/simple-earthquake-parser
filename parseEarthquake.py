@@ -53,7 +53,7 @@ class Earthquake:
 def main():
     http = urllib3.PoolManager()
     usgs = USGSFeed()
-    feed_duration = 'day'
+    feed_duration = 'hour'
     feed_size = 'all'
     feed = usgs.get(feed_duration, feed_size);
     print("Starting...")
