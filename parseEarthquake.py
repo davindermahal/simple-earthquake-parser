@@ -9,15 +9,15 @@ import sqlite3
 
 class USGSFeed:
 
-    _feedDuration = ('hour', 'day', 'week', 'month')
+    _feed_duration = ('hour', 'day', 'week', 'month')
 
-    _feedSize = ('significant', '4.5', '2.5', '1.0', 'all')
+    _feed_size = ('significant', '4.5', '2.5', '1.0', 'all')
 
-    _feedUrl = 'http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/{}_{}.geojson'
+    _feed_url = 'http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/{}_{}.geojson'
 
     def get(self, duration, size='all'):
-        if (duration in self._feedDuration) & (size in self._feedSize):
-            return self._feedUrl.format(size, duration)
+        if (duration in self._feed_duration) and (size in self._feed_size):
+            return self._feed_url.format(size, duration)
         else:
             raise LookupError
 
@@ -53,7 +53,7 @@ class Earthquake:
 def main():
     http = urllib3.PoolManager()
     usgs = USGSFeed()
-    feed_duration = 'hour'
+    feed_duration = 'day'
     feed_size = 'all'
     feed = usgs.get(feed_duration, feed_size);
     print("Starting...")
